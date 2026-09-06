@@ -41,6 +41,12 @@ service cloud.firestore {
       allow create, update, delete: if souGestor();
     }
 
+    // ---- trimestres: períodos de ~3 meses (mudam a lição) ---------------
+    match /trimestres/{trimestreId} {
+      allow read: if estaLogado();
+      allow create, update, delete: if souGestor();
+    }
+
     // ---- turmas ---------------------------------------------------------
     match /turmas/{turmaId} {
       allow read: if souGestor() || (estaLogado() && minhaTurma() == turmaId);

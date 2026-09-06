@@ -16,6 +16,8 @@ const authSecundario = appSecundario.auth();
 let usuarioAtual = null;   // { uid, nome, telefone, papel, turmaId }
 let turmaSelecionada = null;
 let turmasCache = [];
+let trimestreAtivo = null; // { id, nome, dataInicio, dataFim }
+let graficosHistorico = []; // instâncias do Chart.js ativas, para destruir ao trocar de filtro
 
 /* ---------------------------------------------------------------------- */
 /* Utilitários                                                             */
@@ -154,6 +156,7 @@ function montarAbas() {
   const abas = [{ id: "turmas", rotulo: "Turmas" }];
   if (ehGestor()) {
     abas.push({ id: "relatorio", rotulo: "Relatório" });
+    abas.push({ id: "historico", rotulo: "Histórico" });
     abas.push({ id: "usuarios", rotulo: "Acessos" });
   }
 
@@ -181,7 +184,8 @@ function irParaAba(id) {
       ? "Todas as turmas da escola bíblica."
       : "Sua turma.";
     document.getElementById("barra-nova-turma").style.display = ehGestor() ? "flex" : "none";
-    carregarTurmas();
+    document.getElementById("banner-trimestre").style.display = ehGestor() ? "flex" : "none";
+    carregarTrimestreAtivo().then(carregarTurmas);
   } else if (id === "usuarios") {
     document.getElementById("secao-usuarios").classList.add("ativa");
     carregarUsuarios();
@@ -190,6 +194,12 @@ function irParaAba(id) {
     const campoData = document.getElementById("data-relatorio");
     if (!campoData.value) campoData.value = new Date().toISOString().slice(0, 10);
     carregarRelatorio();
+  } else if (id === "historico") {
+    document.getElementById("secao-historico").classList.add("ativa");
+    const campoMes = document.getElementById("historico-mes");
+    if (!campoMes.value) campoMes.value = new Date().toISOString().slice(0, 7);
+    carregarFiltroTurmasHistorico();
+    carregarHistorico();
   }
 }
 
@@ -283,6 +293,93 @@ async function excluirTurma(turmaId) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* TRIMESTRES (a cada ~3 meses a lição muda)                                */
+/* ---------------------------------------------------------------------- */
+
+async function carregarTrimestreAtivo() {
+  try {
+    const snap = await db.collection("trimestres").orderBy("criadoEm", "desc").limit(1).get();
+    if (snap.empty) {
+      trimestreAtivo = null;
+      document.getElementById("nome-trimestre-atual").textContent = "Nenhum trimestre iniciado ainda";
+      return;
+    }
+    const doc = snap.docs[0];
+    trimestreAtivo = { id: doc.id, ...doc.data() };
+    const periodo = trimestreAtivo.dataInicio && trimestreAtivo.dataFim
+      ? ` (${formatarDataBR(trimestreAtivo.dataInicio)} a ${formatarDataBR(trimestreAtivo.dataFim)})`
+      : "";
+    document.getElementById("nome-trimestre-atual").textContent = `${trimestreAtivo.nome}${periodo}`;
+  } catch (erro) {
+    console.error(erro);
+    document.getElementById("nome-trimestre-atual").textContent = "Não foi possível carregar o trimestre.";
+  }
+}
+
+function abrirModalTrimestre() {
+  document.getElementById("trimestre-nome").value = "";
+  document.getElementById("trimestre-inicio").value = "";
+  document.getElementById("trimestre-fim").value = "";
+  document.querySelector('input[name="opcao-trimestre"][value="repetir"]').checked = true;
+  abrirModal("modal-trimestre");
+}
+
+async function salvarNovoTrimestre() {
+  const nome = document.getElementById("trimestre-nome").value.trim();
+  const dataInicio = document.getElementById("trimestre-inicio").value;
+  const dataFim = document.getElementById("trimestre-fim").value;
+  const opcao = document.querySelector('input[name="opcao-trimestre"]:checked').value;
+
+  if (!nome || !dataInicio || !dataFim) {
+    alert("Preencha nome, data de início e data de término do trimestre.");
+    return;
+  }
+
+  try {
+    const trimestreAnteriorId = trimestreAtivo ? trimestreAtivo.id : null;
+
+    const novoRef = await db.collection("trimestres").add({
+      nome,
+      dataInicio,
+      dataFim,
+      criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
+      criadoPor: usuarioAtual.uid,
+    });
+
+    if (opcao === "repetir" && trimestreAnteriorId) {
+      // Copia os alunos do trimestre anterior para o novo, mantendo cada um na sua turma.
+      const alunosAnteriores = await db.collection("alunos")
+        .where("trimestreId", "==", trimestreAnteriorId)
+        .get();
+
+      const lote = db.batch();
+      alunosAnteriores.docs.forEach((d) => {
+        const dados = d.data();
+        const novoAlunoRef = db.collection("alunos").doc();
+        lote.set(novoAlunoRef, {
+          nome: dados.nome,
+          dataNascimento: dados.dataNascimento || null,
+          contato: dados.contato || null,
+          turmaId: dados.turmaId,
+          trimestreId: novoRef.id,
+          criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+      await lote.commit();
+    }
+
+    trimestreAtivo = { id: novoRef.id, nome, dataInicio, dataFim };
+    fecharModal("modal-trimestre");
+    await carregarTrimestreAtivo();
+    carregarTurmas();
+    alert(`Trimestre "${nome}" iniciado! ${opcao === "repetir" ? "Os alunos foram mantidos nas turmas." : "As turmas começam vazias para nova matrícula."}`);
+  } catch (erro) {
+    console.error(erro);
+    alert("Não foi possível iniciar o novo trimestre. Tente novamente.");
+  }
+}
+
+/* ---------------------------------------------------------------------- */
 /* ALUNOS                                                                   */
 /* ---------------------------------------------------------------------- */
 
@@ -305,9 +402,11 @@ async function carregarAlunos() {
   try {
     // Nota: não usamos .orderBy() aqui de propósito — combinar where + orderBy em campos
     // diferentes exigiria um índice combinado no Firestore. Ordenamos no próprio navegador.
-    const snap = await db.collection("alunos").where("turmaId", "==", turmaSelecionada.id).get();
+    let query = db.collection("alunos").where("turmaId", "==", turmaSelecionada.id);
+    if (trimestreAtivo) query = query.where("trimestreId", "==", trimestreAtivo.id);
+    const snap = await query.get();
     if (snap.empty) {
-      lista.innerHTML = '<div class="vazio">Nenhum aluno cadastrado nesta turma.</div>';
+      lista.innerHTML = '<div class="vazio">Nenhum aluno matriculado nesta turma neste trimestre.</div>';
       return;
     }
     const alunos = snap.docs
@@ -353,6 +452,7 @@ async function salvarAluno() {
       dataNascimento: nascimento || null,
       contato: contato || null,
       turmaId: turmaSelecionada.id,
+      trimestreId: trimestreAtivo ? trimestreAtivo.id : null,
       criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
     });
     fecharModal("modal-aluno");
@@ -410,8 +510,10 @@ async function carregarChamada() {
 
   try {
     // Nota: sem .orderBy() aqui de propósito (veja explicação em carregarAlunos).
+    let queryAlunos = db.collection("alunos").where("turmaId", "==", turmaSelecionada.id);
+    if (trimestreAtivo) queryAlunos = queryAlunos.where("trimestreId", "==", trimestreAtivo.id);
     const [alunosSnap, presencaSnap] = await Promise.all([
-      db.collection("alunos").where("turmaId", "==", turmaSelecionada.id).get(),
+      queryAlunos.get(),
       db.collection("presencas").doc(`${turmaSelecionada.id}_${data}`).get(),
     ]);
 
@@ -426,6 +528,7 @@ async function carregarChamada() {
     document.getElementById("chamada-biblias").value = dadosSalvos.biblias ?? "";
     document.getElementById("chamada-visitantes").value = dadosSalvos.visitantes ?? "";
     document.getElementById("chamada-oferta").value = dadosSalvos.oferta ?? "";
+    document.getElementById("btn-excluir-chamada").style.display = presencaSnap.exists ? "inline-flex" : "none";
 
     const alunos = alunosSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
@@ -475,6 +578,7 @@ async function salvarChamada() {
   await docRef.set({
     turmaId: turmaSelecionada.id,
     turmaNome: turmaSelecionada.nome,
+    trimestreId: trimestreAtivo ? trimestreAtivo.id : null,
     data,
     presenca: presencaFinal,
     revistas,
@@ -486,7 +590,24 @@ async function salvarChamada() {
   });
 
   Object.keys(presencaEmEdicao).forEach((k) => delete presencaEmEdicao[k]);
+  document.getElementById("btn-excluir-chamada").style.display = "inline-flex";
   alert("Chamada e dados da aula salvos!");
+}
+
+async function excluirChamada() {
+  const data = document.getElementById("data-chamada").value;
+  if (!data) return;
+  if (!confirm(`Excluir a chamada de ${formatarDataBR(data)} desta turma? Essa ação não pode ser desfeita.`)) return;
+
+  try {
+    await db.collection("presencas").doc(`${turmaSelecionada.id}_${data}`).delete();
+    Object.keys(presencaEmEdicao).forEach((k) => delete presencaEmEdicao[k]);
+    alert("Chamada excluída.");
+    carregarChamada();
+  } catch (erro) {
+    console.error(erro);
+    alert("Não foi possível excluir a chamada. Tente novamente.");
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -537,7 +658,18 @@ async function abrirModalUsuario() {
 
 function atualizarCampoTurmaUsuario() {
   const papel = document.getElementById("usuario-papel").value;
-  document.getElementById("campo-turma-usuario").style.display = papel === "professor" ? "block" : "none";
+  const rotulo = document.getElementById("rotulo-turma-usuario");
+  const dica = document.getElementById("dica-turma-usuario");
+  // O campo de turma agora fica disponível para qualquer papel: um coordenador ou
+  // pastor também pode lecionar uma turma, além de ter acesso completo ao sistema.
+  document.getElementById("campo-turma-usuario").style.display = "block";
+  if (papel === "professor") {
+    rotulo.textContent = "Turma que irá lecionar";
+    dica.style.display = "none";
+  } else {
+    rotulo.textContent = "Também leciona uma turma? (opcional)";
+    dica.style.display = "block";
+  }
 }
 
 async function salvarUsuario() {
@@ -568,12 +700,12 @@ async function salvarUsuario() {
       nome,
       telefone: apenasDigitos(telefone),
       papel,
-      turmaId: papel === "professor" ? turmaId : null,
+      turmaId: turmaId || null,
       criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
       criadoPor: usuarioAtual.uid,
     });
 
-    if (papel === "professor" && turmaId) {
+    if (turmaId) {
       await db.collection("turmas").doc(turmaId).update({ professorId: novoUid, professorNome: nome });
     }
 
@@ -725,6 +857,117 @@ function formatarMoeda(valor) {
 function formatarDataBR(dataISO) {
   const [ano, mes, dia] = dataISO.split("-");
   return `${dia}/${mes}/${ano}`;
+}
+
+/* ---------------------------------------------------------------------- */
+/* HISTÓRICO MENSAL (somente coordenador e pastor)                          */
+/* ---------------------------------------------------------------------- */
+
+async function carregarFiltroTurmasHistorico() {
+  const select = document.getElementById("historico-turma");
+  const valorAtual = select.value;
+  select.innerHTML = '<option value="">Todas as turmas</option>';
+  const snap = await db.collection("turmas").get();
+  snap.docs.forEach((d) => {
+    const opt = document.createElement("option");
+    opt.value = d.id;
+    opt.textContent = d.data().nome;
+    select.appendChild(opt);
+  });
+  select.value = valorAtual || "";
+}
+
+async function carregarHistorico() {
+  const mesInput = document.getElementById("historico-mes").value; // formato AAAA-MM
+  const turmaFiltro = document.getElementById("historico-turma").value; // turmaId ou ""
+  const container = document.getElementById("historico-conteudo");
+
+  if (!mesInput) { container.innerHTML = '<div class="vazio">Selecione um mês.</div>'; return; }
+  container.innerHTML = '<div class="carregando">Carregando dados do mês...</div>';
+
+  try {
+    // Buscamos por turma (se filtrado) ou tudo, e filtramos o mês no navegador —
+    // evita a necessidade de índices combinados no Firestore.
+    let query = db.collection("presencas");
+    if (turmaFiltro) query = query.where("turmaId", "==", turmaFiltro);
+    const snap = await query.get();
+
+    const registros = snap.docs.map((d) => d.data()).filter((r) => (r.data || "").startsWith(mesInput));
+
+    if (registros.length === 0) {
+      destruirGraficosHistorico();
+      container.innerHTML = '<div class="vazio">Nenhuma chamada registrada neste mês (com esse filtro).</div>';
+      return;
+    }
+
+    const porData = {};
+    registros.forEach((r) => {
+      if (!porData[r.data]) porData[r.data] = { presentes: 0, oferta: 0, revistas: 0, biblias: 0, visitantes: 0 };
+      const presentesDoRegistro = Object.values(r.presenca || {}).filter((v) => v === true).length;
+      porData[r.data].presentes += presentesDoRegistro;
+      porData[r.data].oferta += r.oferta || 0;
+      porData[r.data].revistas += r.revistas || 0;
+      porData[r.data].biblias += r.biblias || 0;
+      porData[r.data].visitantes += r.visitantes || 0;
+    });
+
+    const datasOrdenadas = Object.keys(porData).sort();
+    const rotulos = datasOrdenadas.map(formatarDataBR);
+    const serie = (campo) => datasOrdenadas.map((d) => porData[d][campo]);
+    const somar = (arr) => arr.reduce((a, b) => a + b, 0);
+
+    const totalPresentes = somar(serie("presentes"));
+    const totalOferta = somar(serie("oferta"));
+    const totalRevistas = somar(serie("revistas"));
+    const totalBiblias = somar(serie("biblias"));
+    const totalVisitantes = somar(serie("visitantes"));
+
+    container.innerHTML = `
+      <div class="campeas-grid">
+        <div class="campea-card"><div class="rotulo">Presenças no mês</div><div class="nome-turma">${totalPresentes}</div></div>
+        <div class="campea-card"><div class="rotulo">Oferta no mês</div><div class="nome-turma">${formatarMoeda(totalOferta)}</div></div>
+        <div class="campea-card"><div class="rotulo">Revistas usadas</div><div class="nome-turma">${totalRevistas}</div></div>
+        <div class="campea-card"><div class="rotulo">Bíblias trazidas</div><div class="nome-turma">${totalBiblias}</div></div>
+        <div class="campea-card"><div class="rotulo">Visitantes</div><div class="nome-turma">${totalVisitantes}</div></div>
+      </div>
+      <div class="grafico-card"><h3>Presença por domingo</h3><canvas id="grafico-presenca"></canvas></div>
+      <div class="grafico-card"><h3>Oferta por domingo (R$)</h3><canvas id="grafico-oferta"></canvas></div>
+    `;
+
+    destruirGraficosHistorico();
+
+    const ctxPresenca = document.getElementById("grafico-presenca").getContext("2d");
+    graficosHistorico.push(new Chart(ctxPresenca, {
+      type: "line",
+      data: { labels: rotulos, datasets: [{ label: "Presentes", data: serie("presentes"), borderColor: "#1E3A5F", backgroundColor: "#1E3A5F", tension: .3 }] },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+    }));
+
+    const ctxOferta = document.getElementById("grafico-oferta").getContext("2d");
+    graficosHistorico.push(new Chart(ctxOferta, {
+      type: "bar",
+      data: { labels: rotulos, datasets: [{ label: "Oferta (R$)", data: serie("oferta"), backgroundColor: "#B8933F" }] },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    }));
+  } catch (erro) {
+    console.error(erro);
+    container.innerHTML = '<div class="vazio">Não foi possível carregar o histórico. Tente novamente.</div>';
+  }
+}
+
+function destruirGraficosHistorico() {
+  graficosHistorico.forEach((g) => g.destroy());
+  graficosHistorico = [];
+}
+
+function exportarRelatorioPDF() {
+  const data = document.getElementById("data-relatorio").value;
+  if (!data || document.getElementById("relatorio-conteudo").innerHTML.trim() === "") {
+    alert("Escolha uma data com fechamento registrado antes de exportar.");
+    return;
+  }
+  document.title = `Fechamento EBD - ${formatarDataBR(data)}`;
+  window.print();
 }
 
 /* ---------------------------------------------------------------------- */

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>EBD - Escola Bíblica Dominical</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" href="logo-icone.png" type="image/png">
 <meta name="theme-color" content="#1E3A5F">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -217,6 +218,37 @@
   table.tabela-relatorio th{ background:#F1EFE9; color: var(--tinta-suave); font-weight:600; }
   table.tabela-relatorio tfoot td{ font-weight:700; background:#FAFAF8; }
   .tabela-wrap{ overflow-x:auto; }
+
+  .logo-igreja{ height:34px; width:auto; border-radius:6px; }
+
+  .banner-trimestre{
+    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+    background:#fff; border:1px solid var(--linha); border-left:4px solid var(--dourado);
+    border-radius: var(--raio); padding: 14px 18px; margin-bottom: 20px;
+  }
+  .banner-trimestre .rotulo{ font-size:.78rem; color: var(--tinta-suave); }
+  .banner-trimestre .nome{ font-family:'Lora', serif; font-weight:600; color: var(--azul); font-size:1.05rem; }
+  .banner-trimestre button{ background: var(--azul); color:#fff; border:none; padding:9px 16px; border-radius:8px; font-size:.85rem; cursor:pointer; white-space:nowrap; }
+
+  .opcoes-radio{ display:flex; flex-direction:column; gap:10px; margin: 6px 0 18px; }
+  .opcao-radio{ display:flex; align-items:flex-start; gap:10px; border:1px solid var(--linha); border-radius:8px; padding:12px; cursor:pointer; }
+  .opcao-radio input{ margin-top:3px; }
+  .opcao-radio .titulo-opcao{ font-weight:600; font-size:.92rem; }
+  .opcao-radio .desc-opcao{ font-size:.8rem; color: var(--tinta-suave); }
+
+  .filtros-historico{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:20px; }
+  .filtros-historico .campo{ margin-bottom:0; min-width:160px; }
+
+  .grafico-card{ background:#fff; border:1px solid var(--linha); border-radius: var(--raio); padding:18px; margin-bottom:20px; }
+  .grafico-card h3{ font-size:1rem; color: var(--azul); margin-bottom:14px; }
+
+  @media print{
+    .topo, .abas, .barra-acao, #btn-excluir-chamada, .btn-texto{ display:none !important; }
+    main{ max-width:100%; padding:0; }
+    body{ background:#fff; }
+    .secao{ display:none !important; }
+    .secao.ativa{ display:block !important; }
+  }
 </style>
 </head>
 <body>
@@ -224,6 +256,7 @@
 <!-- ============ TELA DE LOGIN ============ -->
 <div id="tela-login">
   <div class="cartao-login">
+    <img src="logo.png" alt="Logo da igreja" style="max-height:70px; max-width:100%; margin-bottom:18px;" onerror="this.style.display='none'">
     <h1>Escola Bíblica Dominical</h1>
     <p class="sub">Acesso restrito a coordenadores, pastores e professores.</p>
 
@@ -262,7 +295,10 @@
 <!-- ============ APP ============ -->
 <div id="app">
   <div class="topo">
-    <div class="marca">EBD <span>&middot;</span> Escola Bíblica</div>
+    <div class="marca" style="display:flex; align-items:center; gap:10px;">
+      <img src="logo-icone.png" alt="Logo da igreja" class="logo-igreja" onerror="this.style.display='none'">
+      <span>EBD <span style="color:var(--dourado);">&middot;</span> Escola Bíblica</span>
+    </div>
     <div class="usuario">
       <span id="nome-usuario-topo"></span>
       <button onclick="sair()">Sair</button>
@@ -274,6 +310,13 @@
   <main>
     <!-- SEÇÃO TURMAS -->
     <section class="secao" id="secao-turmas">
+      <div class="banner-trimestre" id="banner-trimestre" style="display:none;">
+        <div>
+          <div class="rotulo">Trimestre atual</div>
+          <div class="nome" id="nome-trimestre-atual">—</div>
+        </div>
+        <button onclick="abrirModalTrimestre()">Iniciar novo trimestre</button>
+      </div>
       <h2>Turmas</h2>
       <p class="desc" id="desc-turmas"></p>
       <div class="barra-acao" id="barra-nova-turma" style="display:none;">
@@ -324,6 +367,7 @@
       <div id="lista-chamada"></div>
       <div class="barra-acao">
         <button class="btn btn-primario" onclick="salvarChamada()">Salvar chamada e dados da aula</button>
+        <button class="btn btn-secundario" id="btn-excluir-chamada" onclick="excluirChamada()" style="color:var(--alerta); border-color:#E8C9C2; display:none;">Excluir esta chamada</button>
       </div>
     </section>
 
@@ -341,11 +385,37 @@
     <section class="secao" id="secao-relatorio">
       <h2>Fechamento do domingo</h2>
       <p class="desc">Resumo geral de todas as turmas em uma data.</p>
-      <div class="campo" style="max-width:220px;">
-        <label>Data do domingo</label>
-        <input type="date" id="data-relatorio" onchange="carregarRelatorio()">
+      <div class="barra-acao">
+        <div class="campo" style="max-width:220px; margin-bottom:0;">
+          <label>Data do domingo</label>
+          <input type="date" id="data-relatorio" onchange="carregarRelatorio()">
+        </div>
+      </div>
+      <div class="barra-acao">
+        <button class="btn btn-secundario" onclick="exportarRelatorioPDF()">🖨️ Exportar / Imprimir PDF</button>
       </div>
       <div id="relatorio-conteudo"></div>
+    </section>
+
+    <!-- SEÇÃO HISTÓRICO / RELATÓRIO MENSAL (coordenador/pastor) -->
+    <section class="secao" id="secao-historico">
+      <h2>Histórico mensal</h2>
+      <p class="desc">Evolução de presença, oferta e materiais ao longo do tempo.</p>
+
+      <div class="filtros-historico">
+        <div class="campo">
+          <label>Mês</label>
+          <input type="month" id="historico-mes" onchange="carregarHistorico()">
+        </div>
+        <div class="campo">
+          <label>Turma</label>
+          <select id="historico-turma" onchange="carregarHistorico()">
+            <option value="">Todas as turmas</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="historico-conteudo"></div>
     </section>
   </main>
 </div>
@@ -392,6 +462,49 @@
   </div>
 </div>
 
+<!-- ============ MODAL: NOVO TRIMESTRE ============ -->
+<div class="modal-fundo" id="modal-trimestre">
+  <div class="modal">
+    <h3>Iniciar novo trimestre</h3>
+    <p style="font-size:.85rem; color:var(--tinta-suave); margin-bottom:16px;">
+      A cada 3 meses a lição muda. Ao iniciar um novo trimestre, você escolhe se os alunos
+      já matriculados continuam nas turmas ou se cada turma recomeça vazia para nova matrícula.
+    </p>
+    <div class="campo">
+      <label>Nome do trimestre</label>
+      <input type="text" id="trimestre-nome" placeholder="Ex: 1º Trimestre 2027">
+    </div>
+    <div class="campo">
+      <label>Data de início</label>
+      <input type="date" id="trimestre-inicio">
+    </div>
+    <div class="campo">
+      <label>Data de término (aproximada)</label>
+      <input type="date" id="trimestre-fim">
+    </div>
+    <div class="opcoes-radio">
+      <label class="opcao-radio">
+        <input type="radio" name="opcao-trimestre" value="repetir" checked>
+        <div>
+          <div class="titulo-opcao">Repetir alunos do trimestre atual</div>
+          <div class="desc-opcao">Todos os alunos matriculados continuam nas mesmas turmas no novo trimestre.</div>
+        </div>
+      </label>
+      <label class="opcao-radio">
+        <input type="radio" name="opcao-trimestre" value="novo">
+        <div>
+          <div class="titulo-opcao">Começar turmas vazias</div>
+          <div class="desc-opcao">As turmas continuam existindo, mas sem nenhum aluno matriculado — ideal para nova matrícula geral.</div>
+        </div>
+      </label>
+    </div>
+    <div class="linha-btn">
+      <button class="btn btn-secundario" onclick="fecharModal('modal-trimestre')">Cancelar</button>
+      <button class="btn btn-primario" onclick="salvarNovoTrimestre()">Iniciar trimestre</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ MODAL: NOVO USUÁRIO/ACESSO ============ -->
 <div class="modal-fundo" id="modal-usuario">
   <div class="modal">
@@ -417,8 +530,11 @@
       </select>
     </div>
     <div class="campo" id="campo-turma-usuario">
-      <label>Turma que irá lecionar</label>
+      <label id="rotulo-turma-usuario">Turma que irá lecionar</label>
       <select id="usuario-turma"></select>
+      <p id="dica-turma-usuario" style="font-size:.78rem; color:var(--tinta-suave); margin-top:6px; display:none;">
+        Opcional — use se esta pessoa, além de coordenador(a)/pastor(a), também leciona uma turma.
+      </p>
     </div>
     <div class="linha-btn">
       <button class="btn btn-secundario" onclick="fecharModal('modal-usuario')">Cancelar</button>
@@ -434,6 +550,9 @@
 
 <!-- Suas chaves do Firebase (edite este arquivo com os dados do SEU projeto) -->
 <script src="config.js"></script>
+
+<!-- Chart.js para os gráficos do histórico mensal -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 
 <script src="app.js"></script>
 </body>
