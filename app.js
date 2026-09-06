@@ -152,7 +152,10 @@ function ehGestor() {
 
 function montarAbas() {
   const abas = [{ id: "turmas", rotulo: "Turmas" }];
-  if (ehGestor()) abas.push({ id: "usuarios", rotulo: "Acessos" });
+  if (ehGestor()) {
+    abas.push({ id: "relatorio", rotulo: "Relatório" });
+    abas.push({ id: "usuarios", rotulo: "Acessos" });
+  }
 
   const container = document.getElementById("abas");
   container.innerHTML = "";
@@ -182,6 +185,11 @@ function irParaAba(id) {
   } else if (id === "usuarios") {
     document.getElementById("secao-usuarios").classList.add("ativa");
     carregarUsuarios();
+  } else if (id === "relatorio") {
+    document.getElementById("secao-relatorio").classList.add("ativa");
+    const campoData = document.getElementById("data-relatorio");
+    if (!campoData.value) campoData.value = new Date().toISOString().slice(0, 10);
+    carregarRelatorio();
   }
 }
 
@@ -294,48 +302,83 @@ async function carregarAlunos() {
   const lista = document.getElementById("lista-alunos");
   lista.innerHTML = '<div class="carregando">Carregando...</div>';
 
-  const snap = await db.collection("alunos").where("turmaId", "==", turmaSelecionada.id).orderBy("nome").get();
-  if (snap.empty) {
-    lista.innerHTML = '<div class="vazio">Nenhum aluno cadastrado nesta turma.</div>';
-    return;
+  try {
+    // Nota: não usamos .orderBy() aqui de propósito — combinar where + orderBy em campos
+    // diferentes exigiria um índice combinado no Firestore. Ordenamos no próprio navegador.
+    const snap = await db.collection("alunos").where("turmaId", "==", turmaSelecionada.id).get();
+    if (snap.empty) {
+      lista.innerHTML = '<div class="vazio">Nenhum aluno cadastrado nesta turma.</div>';
+      return;
+    }
+    const alunos = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+
+    lista.innerHTML = "";
+    alunos.forEach((a) => {
+      const el = document.createElement("div");
+      el.className = "lista-item";
+      el.innerHTML = `
+        <div class="info">
+          <b>${escapeHtml(a.nome)} ${ehAniversarianteNaSemana(a.dataNascimento) ? '<span class="selo aniversario">🎂 Aniversário</span>' : ""}</b>
+          ${a.contato ? `<span>${escapeHtml(a.contato)}</span>` : ""}
+        </div>
+        <div class="acoes">
+          <button class="excluir" onclick="excluirAluno('${a.id}')">Remover</button>
+        </div>`;
+      lista.appendChild(el);
+    });
+  } catch (erro) {
+    console.error(erro);
+    lista.innerHTML = '<div class="vazio">Não foi possível carregar os alunos. Tente novamente.</div>';
   }
-  lista.innerHTML = "";
-  snap.docs.forEach((d) => {
-    const a = d.data();
-    const el = document.createElement("div");
-    el.className = "lista-item";
-    el.innerHTML = `
-      <div class="info">
-        <b>${escapeHtml(a.nome)}</b>
-        ${a.contato ? `<span>${escapeHtml(a.contato)}</span>` : ""}
-      </div>
-      <div class="acoes">
-        <button class="excluir" onclick="excluirAluno('${d.id}')">Remover</button>
-      </div>`;
-    lista.appendChild(el);
-  });
 }
 
 function abrirModalAluno() {
   document.getElementById("aluno-nome").value = "";
+  document.getElementById("aluno-nascimento").value = "";
   document.getElementById("aluno-contato").value = "";
   abrirModal("modal-aluno");
 }
 
 async function salvarAluno() {
   const nome = document.getElementById("aluno-nome").value.trim();
+  const nascimento = document.getElementById("aluno-nascimento").value; // formato AAAA-MM-DD ou ""
   const contato = document.getElementById("aluno-contato").value.trim();
   if (!nome) { alert("Informe o nome do aluno."); return; }
 
-  await db.collection("alunos").add({
-    nome,
-    contato: contato || null,
-    turmaId: turmaSelecionada.id,
-    criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
-  });
+  try {
+    await db.collection("alunos").add({
+      nome,
+      dataNascimento: nascimento || null,
+      contato: contato || null,
+      turmaId: turmaSelecionada.id,
+      criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    fecharModal("modal-aluno");
+    carregarAlunos();
+  } catch (erro) {
+    console.error(erro);
+    alert("Não foi possível salvar o aluno. Verifique sua conexão e tente novamente.");
+  }
+}
 
-  fecharModal("modal-aluno");
-  carregarAlunos();
+/* Aniversariante da semana: compara dia/mês do aluno com os últimos 7 dias
+   (pensando na aula de domingo, cobre a semana anterior inteira). */
+function ehAniversarianteNaSemana(dataNascimentoISO) {
+  if (!dataNascimentoISO) return false;
+  const partes = dataNascimentoISO.split("-"); // ["AAAA","MM","DD"]
+  if (partes.length !== 3) return false;
+  const mesNasc = parseInt(partes[1], 10);
+  const diaNasc = parseInt(partes[2], 10);
+
+  const hoje = new Date();
+  for (let i = 0; i < 7; i++) {
+    const dia = new Date(hoje);
+    dia.setDate(hoje.getDate() - i);
+    if (dia.getMonth() + 1 === mesNasc && dia.getDate() === diaNasc) return true;
+  }
+  return false;
 }
 
 async function excluirAluno(alunoId) {
@@ -364,32 +407,47 @@ async function carregarChamada() {
   lista.innerHTML = '<div class="carregando">Carregando...</div>';
 
   const data = document.getElementById("data-chamada").value;
-  const [alunosSnap, presencaSnap] = await Promise.all([
-    db.collection("alunos").where("turmaId", "==", turmaSelecionada.id).orderBy("nome").get(),
-    db.collection("presencas").doc(`${turmaSelecionada.id}_${data}`).get(),
-  ]);
 
-  if (alunosSnap.empty) {
-    lista.innerHTML = '<div class="vazio">Cadastre alunos nesta turma antes de fazer a chamada.</div>';
-    return;
+  try {
+    // Nota: sem .orderBy() aqui de propósito (veja explicação em carregarAlunos).
+    const [alunosSnap, presencaSnap] = await Promise.all([
+      db.collection("alunos").where("turmaId", "==", turmaSelecionada.id).get(),
+      db.collection("presencas").doc(`${turmaSelecionada.id}_${data}`).get(),
+    ]);
+
+    if (alunosSnap.empty) {
+      lista.innerHTML = '<div class="vazio">Cadastre alunos nesta turma antes de fazer a chamada.</div>';
+      return;
+    }
+
+    const presencaSalva = presencaSnap.exists ? presencaSnap.data().presenca || {} : {};
+    const dadosSalvos = presencaSnap.exists ? presencaSnap.data() : {};
+    document.getElementById("chamada-revistas").value = dadosSalvos.revistas ?? "";
+    document.getElementById("chamada-biblias").value = dadosSalvos.biblias ?? "";
+    document.getElementById("chamada-visitantes").value = dadosSalvos.visitantes ?? "";
+    document.getElementById("chamada-oferta").value = dadosSalvos.oferta ?? "";
+
+    const alunos = alunosSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+
+    lista.innerHTML = "";
+    alunos.forEach((a) => {
+      const estado = presencaSalva[a.id]; // true, false ou undefined
+      const el = document.createElement("div");
+      el.className = "lista-item";
+      el.innerHTML = `
+        <div class="info"><b>${escapeHtml(a.nome)} ${ehAniversarianteNaSemana(a.dataNascimento) ? '<span class="selo aniversario">🎂</span>' : ""}</b></div>
+        <div class="toggle-presenca" data-aluno="${a.id}">
+          <button type="button" class="sel-presente ${estado === true ? "on" : ""}" onclick="marcarPresenca('${a.id}', true)">Presente</button>
+          <button type="button" class="sel-ausente ${estado === false ? "on" : ""}" onclick="marcarPresenca('${a.id}', false)">Ausente</button>
+        </div>`;
+      lista.appendChild(el);
+    });
+  } catch (erro) {
+    console.error(erro);
+    lista.innerHTML = '<div class="vazio">Não foi possível carregar a chamada. Tente novamente.</div>';
   }
-
-  const presencaSalva = presencaSnap.exists ? presencaSnap.data().presenca || {} : {};
-
-  lista.innerHTML = "";
-  alunosSnap.docs.forEach((d) => {
-    const a = d.data();
-    const estado = presencaSalva[d.id]; // true, false ou undefined
-    const el = document.createElement("div");
-    el.className = "lista-item";
-    el.innerHTML = `
-      <div class="info"><b>${escapeHtml(a.nome)}</b></div>
-      <div class="toggle-presenca" data-aluno="${d.id}">
-        <button type="button" class="sel-presente ${estado === true ? "on" : ""}" onclick="marcarPresenca('${d.id}', true)">Presente</button>
-        <button type="button" class="sel-ausente ${estado === false ? "on" : ""}" onclick="marcarPresenca('${d.id}', false)">Ausente</button>
-      </div>`;
-    lista.appendChild(el);
-  });
 }
 
 const presencaEmEdicao = {};
@@ -409,16 +467,26 @@ async function salvarChamada() {
   const atual = await docRef.get();
   const presencaFinal = { ...(atual.exists ? atual.data().presenca : {}), ...presencaEmEdicao };
 
+  const revistas = parseInt(document.getElementById("chamada-revistas").value, 10) || 0;
+  const biblias = parseInt(document.getElementById("chamada-biblias").value, 10) || 0;
+  const visitantes = parseInt(document.getElementById("chamada-visitantes").value, 10) || 0;
+  const oferta = parseFloat(document.getElementById("chamada-oferta").value) || 0;
+
   await docRef.set({
     turmaId: turmaSelecionada.id,
+    turmaNome: turmaSelecionada.nome,
     data,
     presenca: presencaFinal,
+    revistas,
+    biblias,
+    visitantes,
+    oferta,
     registradoPor: usuarioAtual.uid,
     atualizadoEm: firebase.firestore.FieldValue.serverTimestamp(),
   });
 
   Object.keys(presencaEmEdicao).forEach((k) => delete presencaEmEdicao[k]);
-  alert("Presença salva!");
+  alert("Chamada e dados da aula salvos!");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -529,6 +597,134 @@ async function excluirUsuario(uid) {
   await db.collection("usuarios").doc(uid).delete();
   carregarUsuarios();
   alert("Acesso removido do sistema. Se quiser bloquear o login por completo, remova também o usuário em Firebase Console > Authentication.");
+}
+
+/* ---------------------------------------------------------------------- */
+/* RELATÓRIO / FECHAMENTO DO DOMINGO (somente coordenador e pastor)         */
+/* ---------------------------------------------------------------------- */
+
+async function carregarRelatorio() {
+  const container = document.getElementById("relatorio-conteudo");
+  container.innerHTML = '<div class="carregando">Calculando o fechamento...</div>';
+
+  const data = document.getElementById("data-relatorio").value;
+  if (!data) { container.innerHTML = '<div class="vazio">Selecione uma data.</div>'; return; }
+
+  try {
+    const turmasSnap = await db.collection("turmas").get();
+    if (turmasSnap.empty) {
+      container.innerHTML = '<div class="vazio">Nenhuma turma cadastrada ainda.</div>';
+      return;
+    }
+
+    const linhas = await Promise.all(turmasSnap.docs.map(async (docTurma) => {
+      const turma = { id: docTurma.id, ...docTurma.data() };
+      const [alunosSnap, presencaDoc] = await Promise.all([
+        db.collection("alunos").where("turmaId", "==", turma.id).get(),
+        db.collection("presencas").doc(`${turma.id}_${data}`).get(),
+      ]);
+
+      const matriculados = alunosSnap.size;
+      const dadosAula = presencaDoc.exists ? presencaDoc.data() : {};
+      const presencaMapa = dadosAula.presenca || {};
+      const presentes = Object.values(presencaMapa).filter((v) => v === true).length;
+      const ausentes = matriculados - presentes;
+
+      return {
+        turmaId: turma.id,
+        nome: turma.nome,
+        matriculados,
+        presentes,
+        ausentes: ausentes < 0 ? 0 : ausentes,
+        revistas: dadosAula.revistas || 0,
+        biblias: dadosAula.biblias || 0,
+        visitantes: dadosAula.visitantes || 0,
+        oferta: dadosAula.oferta || 0,
+        temRegistro: presencaDoc.exists,
+      };
+    }));
+
+    renderizarRelatorio(linhas, data);
+  } catch (erro) {
+    console.error(erro);
+    container.innerHTML = '<div class="vazio">Não foi possível calcular o relatório. Tente novamente.</div>';
+  }
+}
+
+function renderizarRelatorio(linhas, data) {
+  const container = document.getElementById("relatorio-conteudo");
+
+  const totais = linhas.reduce((acc, l) => ({
+    matriculados: acc.matriculados + l.matriculados,
+    presentes: acc.presentes + l.presentes,
+    ausentes: acc.ausentes + l.ausentes,
+    revistas: acc.revistas + l.revistas,
+    biblias: acc.biblias + l.biblias,
+    visitantes: acc.visitantes + l.visitantes,
+    oferta: acc.oferta + l.oferta,
+  }), { matriculados: 0, presentes: 0, ausentes: 0, revistas: 0, biblias: 0, visitantes: 0, oferta: 0 });
+
+  const linhasComRegistro = linhas.filter((l) => l.temRegistro);
+
+  if (linhasComRegistro.length === 0) {
+    container.innerHTML = `
+      <div class="vazio">Nenhuma turma registrou a chamada deste domingo (${formatarDataBR(data)}) ainda.</div>`;
+    return;
+  }
+
+  const campeaDe = (campo) => {
+    return linhasComRegistro.reduce((melhor, atual) => (atual[campo] > (melhor ? melhor[campo] : -1) ? atual : melhor), null);
+  };
+
+  const categorias = [
+    { campo: "presentes", rotulo: "Mais presença", formato: (v) => `${v} presentes` },
+    { campo: "oferta", rotulo: "Mais oferta", formato: (v) => formatarMoeda(v) },
+    { campo: "revistas", rotulo: "Mais revistas", formato: (v) => `${v} revistas` },
+    { campo: "biblias", rotulo: "Mais bíblias", formato: (v) => `${v} bíblias` },
+    { campo: "visitantes", rotulo: "Mais visitantes", formato: (v) => `${v} visitantes` },
+  ];
+
+  let html = `<div class="campeas-grid">`;
+  categorias.forEach((cat) => {
+    const vencedora = campeaDe(cat.campo);
+    html += `
+      <div class="campea-card">
+        <div class="rotulo">🏆 ${cat.rotulo}</div>
+        <div class="nome-turma">${vencedora ? escapeHtml(vencedora.nome) : "—"}</div>
+        <div class="valor-destaque">${vencedora ? cat.formato(vencedora[cat.campo]) : "sem dados"}</div>
+      </div>`;
+  });
+  html += `</div>`;
+
+  html += `<div class="tabela-wrap"><table class="tabela-relatorio">
+    <thead><tr>
+      <th>Turma</th><th>Matriculados</th><th>Presentes</th><th>Ausentes</th>
+      <th>Revistas</th><th>Bíblias</th><th>Visitantes</th><th>Oferta</th>
+    </tr></thead><tbody>`;
+
+  linhas.forEach((l) => {
+    html += `<tr>
+      <td>${escapeHtml(l.nome)}${!l.temRegistro ? ' <span class="selo">sem chamada</span>' : ""}</td>
+      <td>${l.matriculados}</td><td>${l.presentes}</td><td>${l.ausentes}</td>
+      <td>${l.revistas}</td><td>${l.biblias}</td><td>${l.visitantes}</td><td>${formatarMoeda(l.oferta)}</td>
+    </tr>`;
+  });
+
+  html += `</tbody><tfoot><tr>
+      <td>Total geral</td><td>${totais.matriculados}</td><td>${totais.presentes}</td><td>${totais.ausentes}</td>
+      <td>${totais.revistas}</td><td>${totais.biblias}</td><td>${totais.visitantes}</td><td>${formatarMoeda(totais.oferta)}</td>
+    </tr></tfoot></table></div>`;
+
+  container.innerHTML = html;
+}
+
+function formatarMoeda(valor) {
+  return (valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatarDataBR(dataISO) {
+  const [ano, mes, dia] = dataISO.split("-");
+  return `${dia}/${mes}/${ano}`;
 }
 
 /* ---------------------------------------------------------------------- */

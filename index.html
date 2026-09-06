@@ -179,6 +179,7 @@
   }
   .selo.presente{ background:#E9F2EC; color: var(--sucesso); }
   .selo.ausente{ background:#FBEAE6; color: var(--alerta); }
+  .selo.aniversario{ background:#FBF1DC; color:#8A6D1F; margin-left:8px; }
 
   .toggle-presenca{
     display:flex; gap:8px;
@@ -190,6 +191,32 @@
   .toggle-presenca button.sel-ausente.on{ background: var(--alerta); color:#fff; border-color: var(--alerta); }
 
   .carregando{ text-align:center; padding: 60px 20px; color: var(--tinta-suave); }
+
+  .grid-dados-aula{
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr));
+    gap:14px; margin: 22px 0; background:#fff; border:1px solid var(--linha);
+    border-radius: var(--raio); padding:18px;
+  }
+  .grid-dados-aula .campo{ margin-bottom:0; }
+  .titulo-bloco{ font-size:.85rem; color: var(--tinta-suave); margin: 0 0 4px 0; text-transform:none; }
+
+  .campeas-grid{
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr));
+    gap:14px; margin-bottom: 28px;
+  }
+  .campea-card{
+    background:#fff; border:1px solid var(--linha); border-radius: var(--raio);
+    padding: 16px 18px; border-top: 3px solid var(--dourado);
+  }
+  .campea-card .rotulo{ font-size:.78rem; color: var(--tinta-suave); margin-bottom:6px; }
+  .campea-card .nome-turma{ font-family:'Lora', serif; font-size:1.05rem; color: var(--azul); font-weight:600; }
+  .campea-card .valor-destaque{ font-size:.85rem; color: var(--tinta-suave); margin-top:4px; }
+
+  table.tabela-relatorio{ width:100%; border-collapse: collapse; background:#fff; border-radius: var(--raio); overflow:hidden; }
+  table.tabela-relatorio th, table.tabela-relatorio td{ padding: 10px 12px; border-bottom:1px solid var(--linha); font-size:.83rem; text-align:left; white-space:nowrap; }
+  table.tabela-relatorio th{ background:#F1EFE9; color: var(--tinta-suave); font-weight:600; }
+  table.tabela-relatorio tfoot td{ font-weight:700; background:#FAFAF8; }
+  .tabela-wrap{ overflow-x:auto; }
 </style>
 </head>
 <body>
@@ -274,9 +301,29 @@
         <label>Data da aula</label>
         <input type="date" id="data-chamada" onchange="carregarChamada()">
       </div>
+
+      <div class="grid-dados-aula">
+        <div class="campo">
+          <label>Revistas usadas</label>
+          <input type="number" min="0" id="chamada-revistas" placeholder="0">
+        </div>
+        <div class="campo">
+          <label>Bíblias trazidas</label>
+          <input type="number" min="0" id="chamada-biblias" placeholder="0">
+        </div>
+        <div class="campo">
+          <label>Visitantes</label>
+          <input type="number" min="0" id="chamada-visitantes" placeholder="0">
+        </div>
+        <div class="campo">
+          <label>Oferta (R$)</label>
+          <input type="number" min="0" step="0.01" id="chamada-oferta" placeholder="0,00">
+        </div>
+      </div>
+
       <div id="lista-chamada"></div>
       <div class="barra-acao">
-        <button class="btn btn-primario" onclick="salvarChamada()">Salvar presença</button>
+        <button class="btn btn-primario" onclick="salvarChamada()">Salvar chamada e dados da aula</button>
       </div>
     </section>
 
@@ -288,6 +335,17 @@
         <button class="btn btn-primario" onclick="abrirModalUsuario()">+ Novo acesso</button>
       </div>
       <div id="lista-usuarios"></div>
+    </section>
+
+    <!-- SEÇÃO RELATÓRIO / FECHAMENTO DO DOMINGO (coordenador/pastor) -->
+    <section class="secao" id="secao-relatorio">
+      <h2>Fechamento do domingo</h2>
+      <p class="desc">Resumo geral de todas as turmas em uma data.</p>
+      <div class="campo" style="max-width:220px;">
+        <label>Data do domingo</label>
+        <input type="date" id="data-relatorio" onchange="carregarRelatorio()">
+      </div>
+      <div id="relatorio-conteudo"></div>
     </section>
   </main>
 </div>
@@ -318,6 +376,10 @@
     <div class="campo">
       <label>Nome completo</label>
       <input type="text" id="aluno-nome" placeholder="Nome do aluno">
+    </div>
+    <div class="campo">
+      <label>Data de nascimento (opcional)</label>
+      <input type="date" id="aluno-nascimento">
     </div>
     <div class="campo">
       <label>Contato do responsável (opcional)</label>
