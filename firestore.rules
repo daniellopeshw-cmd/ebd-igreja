@@ -1,0 +1,69 @@
+rules_version = '2';
+
+// ============================================================================
+// REGRAS DE SEGURANÇA — SISTEMA EBD
+// Copie o conteúdo deste arquivo em:
+// Firebase Console > Firestore Database > Regras > (colar e "Publicar")
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Funções auxiliares -------------------------------------------
+
+    function estaLogado() {
+      return request.auth != null;
+    }
+
+    function meuUsuario() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function meuPapel() {
+      return meuUsuario().papel;
+    }
+
+    function souGestor() {
+      return estaLogado() && (meuPapel() == 'coordenador' || meuPapel() == 'pastor');
+    }
+
+    function minhaTurma() {
+      return meuUsuario().turmaId;
+    }
+
+    // ---- usuarios: quem tem acesso ao sistema --------------------------
+    match /usuarios/{uid} {
+      // qualquer pessoa logada pode ler seu próprio registro (para saber seu papel);
+      // coordenador/pastor podem ler todos, para montar a lista de acessos
+      allow read: if estaLogado() && (request.auth.uid == uid || souGestor());
+
+      // somente coordenador/pastor podem criar, editar ou remover acessos
+      allow create, update, delete: if souGestor();
+    }
+
+    // ---- turmas ---------------------------------------------------------
+    match /turmas/{turmaId} {
+      allow read: if souGestor() || (estaLogado() && minhaTurma() == turmaId);
+      allow create, delete: if souGestor();
+      // permite ao próprio professor atualizar dados simples da turma (opcional)
+      allow update: if souGestor() || (estaLogado() && minhaTurma() == turmaId);
+    }
+
+    // ---- alunos -----------------------------------------------------------
+    match /alunos/{alunoId} {
+      allow read, create, update, delete: if souGestor()
+        || (estaLogado() && minhaTurma() == resource.data.turmaId);
+      // regra especial para "create", quando resource ainda não existe:
+      allow create: if souGestor()
+        || (estaLogado() && minhaTurma() == request.resource.data.turmaId);
+    }
+
+    // ---- presenças ---------------------------------------------------------
+    match /presencas/{presencaId} {
+      allow read, write: if souGestor()
+        || (estaLogado() && minhaTurma() == resource.data.turmaId);
+      allow create: if souGestor()
+        || (estaLogado() && minhaTurma() == request.resource.data.turmaId);
+    }
+  }
+}

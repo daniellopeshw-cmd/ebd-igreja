@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>EBD - Escola Bíblica Dominical</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1E3A5F">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --azul: #1E3A5F;
+    --azul-claro: #2E547F;
+    --dourado: #B8933F;
+    --fundo: #F7F7F5;
+    --cartao: #FFFFFF;
+    --tinta: #262523;
+    --tinta-suave: #6B6862;
+    --linha: #E4E2DC;
+    --sucesso: #4C7A5B;
+    --alerta: #A8402B;
+    --raio: 10px;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin:0;
+    background: var(--fundo);
+    color: var(--tinta);
+    font-family: 'Source Sans 3', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,h2,h3{ font-family:'Lora', Georgia, serif; font-weight:600; margin:0; }
+  button{ font-family: inherit; }
+  input, select{ font-family: inherit; }
+
+  /* ---------- TELA DE LOGIN ---------- */
+  #tela-login{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding: 24px;
+  }
+  .cartao-login{
+    background: var(--cartao);
+    border-radius: var(--raio);
+    padding: 40px 32px;
+    width: 100%;
+    max-width: 380px;
+    border-top: 4px solid var(--azul);
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .cartao-login h1{ font-size: 1.5rem; color: var(--azul); margin-bottom:4px; }
+  .cartao-login p.sub{ color: var(--tinta-suave); margin: 0 0 28px 0; font-size:.95rem; }
+  .campo{ margin-bottom: 18px; }
+  .campo label{ display:block; font-size:.85rem; color: var(--tinta-suave); margin-bottom:6px; }
+  .campo input, .campo select{
+    width:100%;
+    padding: 12px 14px;
+    border: 1px solid var(--linha);
+    border-radius: 8px;
+    font-size: 1rem;
+    background: #fff;
+  }
+  .campo input:focus, .campo select:focus{
+    outline: 2px solid var(--azul-claro);
+    outline-offset: 1px;
+    border-color: var(--azul-claro);
+  }
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    width:100%;
+    padding: 13px 16px;
+    border-radius: 8px;
+    border: none;
+    font-size: 1rem;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .btn-primario{ background: var(--azul); color:#fff; }
+  .btn-primario:hover{ background: var(--azul-claro); }
+  .btn-secundario{ background: transparent; color: var(--azul); border:1px solid var(--linha); }
+  .btn-perigo{ background: var(--alerta); color:#fff; }
+  .btn-texto{ background:none; border:none; color: var(--azul); cursor:pointer; font-size:.9rem; text-decoration: underline; padding:0; }
+  .mensagem-erro{
+    background: #FBEAE6; color: var(--alerta); border-radius: 8px;
+    padding: 10px 14px; font-size:.9rem; margin-bottom: 16px; display:none;
+  }
+  .mensagem-ok{
+    background: #E9F2EC; color: var(--sucesso); border-radius: 8px;
+    padding: 10px 14px; font-size:.9rem; margin-bottom: 16px; display:none;
+  }
+
+  /* ---------- APP (pós-login) ---------- */
+  #app{ display:none; min-height:100vh; }
+  .topo{
+    background: var(--azul);
+    color: #fff;
+    padding: 16px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .topo .marca{ font-family:'Lora', serif; font-size:1.15rem; }
+  .topo .marca span{ color: var(--dourado); }
+  .topo .usuario{ font-size:.85rem; opacity:.9; display:flex; align-items:center; gap:12px; }
+  .topo .usuario button{ background:none; border:1px solid rgba(255,255,255,.4); color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:.8rem; }
+
+  .abas{
+    display:flex;
+    gap:4px;
+    background: #fff;
+    border-bottom: 1px solid var(--linha);
+    padding: 0 16px;
+    overflow-x:auto;
+  }
+  .aba{
+    padding: 14px 16px;
+    font-size:.9rem;
+    color: var(--tinta-suave);
+    cursor:pointer;
+    border-bottom: 3px solid transparent;
+    white-space:nowrap;
+  }
+  .aba.ativa{ color: var(--azul); border-bottom-color: var(--dourado); font-weight:600; }
+
+  main{ max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }
+  .secao{ display:none; }
+  .secao.ativa{ display:block; }
+  .secao h2{ font-size:1.3rem; color: var(--azul); margin-bottom: 4px; }
+  .secao .desc{ color: var(--tinta-suave); font-size:.9rem; margin-bottom: 20px; }
+
+  .barra-acao{ display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap; }
+  .barra-acao .btn{ width:auto; padding: 10px 18px; }
+
+  .lista-item{
+    background: var(--cartao);
+    border: 1px solid var(--linha);
+    border-radius: var(--raio);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .lista-item .info b{ display:block; font-size:1rem; }
+  .lista-item .info span{ color: var(--tinta-suave); font-size:.85rem; }
+  .lista-item .acoes{ display:flex; gap:8px; }
+  .lista-item .acoes button{
+    background:none; border:1px solid var(--linha); border-radius:6px;
+    padding: 6px 10px; font-size:.8rem; cursor:pointer; color: var(--tinta);
+  }
+  .lista-item .acoes button.excluir{ color: var(--alerta); border-color: #E8C9C2; }
+
+  .vazio{
+    text-align:center; padding: 40px 20px; color: var(--tinta-suave);
+    background: var(--cartao); border-radius: var(--raio); border:1px dashed var(--linha);
+  }
+
+  .modal-fundo{
+    display:none; position:fixed; inset:0; background: rgba(38,37,35,.5);
+    align-items:center; justify-content:center; padding:20px; z-index:50;
+  }
+  .modal{
+    background:#fff; border-radius: var(--raio); padding: 28px; width:100%; max-width: 420px;
+    max-height: 90vh; overflow-y:auto;
+  }
+  .modal h3{ color: var(--azul); margin-bottom: 18px; }
+  .modal .linha-btn{ display:flex; gap:10px; margin-top: 20px; }
+
+  .selo{
+    display:inline-block; font-size:.75rem; padding: 3px 10px; border-radius: 20px;
+    background: #EDE6D3; color: #7A5F1E; font-weight:600;
+  }
+  .selo.presente{ background:#E9F2EC; color: var(--sucesso); }
+  .selo.ausente{ background:#FBEAE6; color: var(--alerta); }
+
+  .toggle-presenca{
+    display:flex; gap:8px;
+  }
+  .toggle-presenca button{
+    flex:1; padding: 8px; border-radius:6px; border:1px solid var(--linha); background:#fff; cursor:pointer; font-size:.85rem;
+  }
+  .toggle-presenca button.sel-presente.on{ background: var(--sucesso); color:#fff; border-color: var(--sucesso); }
+  .toggle-presenca button.sel-ausente.on{ background: var(--alerta); color:#fff; border-color: var(--alerta); }
+
+  .carregando{ text-align:center; padding: 60px 20px; color: var(--tinta-suave); }
+</style>
+</head>
+<body>
+
+<!-- ============ TELA DE LOGIN ============ -->
+<div id="tela-login">
+  <div class="cartao-login">
+    <h1>Escola Bíblica Dominical</h1>
+    <p class="sub">Acesso restrito a coordenadores, pastores e professores.</p>
+
+    <div class="mensagem-erro" id="login-erro"></div>
+    <div class="mensagem-ok" id="login-ok"></div>
+
+    <div id="bloco-login-senha">
+      <div class="campo">
+        <label>Número de celular</label>
+        <input type="tel" id="login-telefone" placeholder="(11) 91234-5678" inputmode="numeric">
+      </div>
+      <div class="campo">
+        <label>Senha</label>
+        <input type="password" id="login-senha" placeholder="Sua senha">
+      </div>
+      <button class="btn btn-primario" onclick="fazerLogin()">Entrar</button>
+      <p style="text-align:center; margin-top:16px;">
+        <button class="btn-texto" onclick="mostrarRecuperar()">Esqueci minha senha</button>
+      </p>
+    </div>
+
+    <div id="bloco-recuperar" style="display:none;">
+      <p style="font-size:.9rem; color:var(--tinta-suave); margin-bottom:16px;">
+        Informe o celular cadastrado. Se ele tiver um e-mail associado, enviaremos um link de redefinição.
+        Caso não tenha e-mail cadastrado, procure um coordenador para redefinir sua senha.
+      </p>
+      <div class="campo">
+        <label>Número de celular</label>
+        <input type="tel" id="recuperar-telefone" placeholder="(11) 91234-5678" inputmode="numeric">
+      </div>
+      <button class="btn btn-secundario" onclick="mostrarLogin()">Voltar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app">
+  <div class="topo">
+    <div class="marca">EBD <span>&middot;</span> Escola Bíblica</div>
+    <div class="usuario">
+      <span id="nome-usuario-topo"></span>
+      <button onclick="sair()">Sair</button>
+    </div>
+  </div>
+
+  <div class="abas" id="abas"></div>
+
+  <main>
+    <!-- SEÇÃO TURMAS -->
+    <section class="secao" id="secao-turmas">
+      <h2>Turmas</h2>
+      <p class="desc" id="desc-turmas"></p>
+      <div class="barra-acao" id="barra-nova-turma" style="display:none;">
+        <button class="btn btn-primario" onclick="abrirModalTurma()">+ Nova turma</button>
+      </div>
+      <div id="lista-turmas"></div>
+    </section>
+
+    <!-- SEÇÃO ALUNOS DE UMA TURMA -->
+    <section class="secao" id="secao-alunos">
+      <button class="btn-texto" onclick="voltarParaTurmas()">&larr; Voltar para turmas</button>
+      <h2 id="titulo-turma-alunos" style="margin-top:10px;"></h2>
+      <p class="desc">Alunos matriculados nesta turma.</p>
+      <div class="barra-acao">
+        <button class="btn btn-primario" onclick="abrirModalAluno()">+ Novo aluno</button>
+      </div>
+      <div id="lista-alunos"></div>
+    </section>
+
+    <!-- SEÇÃO CHAMADA -->
+    <section class="secao" id="secao-chamada">
+      <button class="btn-texto" onclick="voltarParaTurmas()">&larr; Voltar para turmas</button>
+      <h2 id="titulo-turma-chamada" style="margin-top:10px;"></h2>
+      <div class="campo" style="max-width:220px; margin-top:14px;">
+        <label>Data da aula</label>
+        <input type="date" id="data-chamada" onchange="carregarChamada()">
+      </div>
+      <div id="lista-chamada"></div>
+      <div class="barra-acao">
+        <button class="btn btn-primario" onclick="salvarChamada()">Salvar presença</button>
+      </div>
+    </section>
+
+    <!-- SEÇÃO USUÁRIOS (coordenador/pastor) -->
+    <section class="secao" id="secao-usuarios">
+      <h2>Coordenadores, pastores e professores</h2>
+      <p class="desc">Cadastre quem terá acesso ao sistema.</p>
+      <div class="barra-acao">
+        <button class="btn btn-primario" onclick="abrirModalUsuario()">+ Novo acesso</button>
+      </div>
+      <div id="lista-usuarios"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ============ MODAL: NOVA TURMA ============ -->
+<div class="modal-fundo" id="modal-turma">
+  <div class="modal">
+    <h3>Nova turma</h3>
+    <div class="campo">
+      <label>Nome da turma</label>
+      <input type="text" id="turma-nome" placeholder="Ex: Adultos - Sala 3">
+    </div>
+    <div class="campo" id="campo-professor-turma">
+      <label>Professor responsável</label>
+      <select id="turma-professor"></select>
+    </div>
+    <div class="linha-btn">
+      <button class="btn btn-secundario" onclick="fecharModal('modal-turma')">Cancelar</button>
+      <button class="btn btn-primario" onclick="salvarTurma()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: NOVO ALUNO ============ -->
+<div class="modal-fundo" id="modal-aluno">
+  <div class="modal">
+    <h3>Novo aluno</h3>
+    <div class="campo">
+      <label>Nome completo</label>
+      <input type="text" id="aluno-nome" placeholder="Nome do aluno">
+    </div>
+    <div class="campo">
+      <label>Contato do responsável (opcional)</label>
+      <input type="tel" id="aluno-contato" placeholder="Telefone">
+    </div>
+    <div class="linha-btn">
+      <button class="btn btn-secundario" onclick="fecharModal('modal-aluno')">Cancelar</button>
+      <button class="btn btn-primario" onclick="salvarAluno()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: NOVO USUÁRIO/ACESSO ============ -->
+<div class="modal-fundo" id="modal-usuario">
+  <div class="modal">
+    <h3>Novo acesso ao sistema</h3>
+    <div class="campo">
+      <label>Nome completo</label>
+      <input type="text" id="usuario-nome" placeholder="Nome da pessoa">
+    </div>
+    <div class="campo">
+      <label>Número de celular (será o login)</label>
+      <input type="tel" id="usuario-telefone" placeholder="(11) 91234-5678" inputmode="numeric">
+    </div>
+    <div class="campo">
+      <label>Senha inicial</label>
+      <input type="text" id="usuario-senha" placeholder="Mínimo 6 caracteres">
+    </div>
+    <div class="campo">
+      <label>Papel</label>
+      <select id="usuario-papel" onchange="atualizarCampoTurmaUsuario()">
+        <option value="professor">Professor</option>
+        <option value="coordenador">Coordenador</option>
+        <option value="pastor">Pastor</option>
+      </select>
+    </div>
+    <div class="campo" id="campo-turma-usuario">
+      <label>Turma que irá lecionar</label>
+      <select id="usuario-turma"></select>
+    </div>
+    <div class="linha-btn">
+      <button class="btn btn-secundario" onclick="fecharModal('modal-usuario')">Cancelar</button>
+      <button class="btn btn-primario" onclick="salvarUsuario()">Criar acesso</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= FIREBASE (SDK compat via CDN) ================= -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+<!-- Suas chaves do Firebase (edite este arquivo com os dados do SEU projeto) -->
+<script src="config.js"></script>
+
+<script src="app.js"></script>
+</body>
+</html>

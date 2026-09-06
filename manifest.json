@@ -1,0 +1,9 @@
+{
+  "name": "EBD - Escola Bíblica Dominical",
+  "short_name": "EBD",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F7F7F5",
+  "theme_color": "#1E3A5F",
+  "icons": []
+}
