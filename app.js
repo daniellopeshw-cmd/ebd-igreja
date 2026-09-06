@@ -785,6 +785,7 @@ async function carregarRelatorio() {
 
 function renderizarRelatorio(linhas, data) {
   const container = document.getElementById("relatorio-conteudo");
+  const tituloData = `<h3 style="font-size:1.15rem; color:var(--azul); margin-bottom:18px;">Fechamento Domingo &middot; Data ${formatarDataBR(data)}</h3>`;
 
   const totais = linhas.reduce((acc, l) => ({
     matriculados: acc.matriculados + l.matriculados,
@@ -799,8 +800,8 @@ function renderizarRelatorio(linhas, data) {
   const linhasComRegistro = linhas.filter((l) => l.temRegistro);
 
   if (linhasComRegistro.length === 0) {
-    container.innerHTML = `
-      <div class="vazio">Nenhuma turma registrou a chamada deste domingo (${formatarDataBR(data)}) ainda.</div>`;
+    container.innerHTML = `${tituloData}
+      <div class="vazio">Nenhuma turma registrou a chamada deste domingo ainda.</div>`;
     return;
   }
 
@@ -816,7 +817,8 @@ function renderizarRelatorio(linhas, data) {
     { campo: "visitantes", rotulo: "Mais visitantes", formato: (v) => `${v} visitantes` },
   ];
 
-  let html = `<div class="campeas-grid">`;
+  let html = tituloData;
+  html += `<div class="campeas-grid">`;
   categorias.forEach((cat) => {
     const vencedora = campeaDe(cat.campo);
     html += `

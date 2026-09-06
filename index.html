@@ -65,6 +65,15 @@
     font-size: 1rem;
     background: #fff;
   }
+  .campo select{
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236B6862' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+  }
   .campo input:focus, .campo select:focus{
     outline: 2px solid var(--azul-claro);
     outline-offset: 1px;
@@ -102,15 +111,18 @@
   .topo{
     background: var(--azul);
     color: #fff;
-    padding: 16px 20px;
+    padding: 14px 20px;
     display:flex;
     align-items:center;
     justify-content:space-between;
+    gap:12px;
   }
-  .topo .marca{ font-family:'Lora', serif; font-size:1.15rem; }
-  .topo .marca span{ color: var(--dourado); }
-  .topo .usuario{ font-size:.85rem; opacity:.9; display:flex; align-items:center; gap:12px; }
-  .topo .usuario button{ background:none; border:1px solid rgba(255,255,255,.4); color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:.8rem; }
+  .topo .marca-bloco{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .topo .marca-linha1{ display:flex; align-items:center; gap:10px; }
+  .topo .marca-linha1 span{ font-family:'Lora', serif; font-size:1.05rem; line-height:1.25; }
+  .topo .marca-usuario{ font-size:.78rem; opacity:.85; }
+  .topo .logo-igreja{ height:46px; }
+  .topo button.sair{ background:none; border:1px solid rgba(255,255,255,.4); color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:.8rem; flex-shrink:0; }
 
   .abas{
     display:flex;
@@ -238,13 +250,14 @@
   .opcao-radio .desc-opcao{ font-size:.8rem; color: var(--tinta-suave); }
 
   .filtros-historico{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:20px; }
-  .filtros-historico .campo{ margin-bottom:0; min-width:160px; }
+  .filtros-historico .campo{ margin-bottom:0; min-width:160px; flex:1 1 160px; }
 
   .grafico-card{ background:#fff; border:1px solid var(--linha); border-radius: var(--raio); padding:18px; margin-bottom:20px; }
   .grafico-card h3{ font-size:1rem; color: var(--azul); margin-bottom:14px; }
 
   @media print{
     .topo, .abas, .barra-acao, #btn-excluir-chamada, .btn-texto{ display:none !important; }
+    #secao-relatorio > h2, #secao-relatorio > p.desc{ display:none !important; }
     main{ max-width:100%; padding:0; }
     body{ background:#fff; }
     .secao{ display:none !important; }
@@ -296,14 +309,14 @@
 <!-- ============ APP ============ -->
 <div id="app">
   <div class="topo">
-    <div class="marca" style="display:flex; align-items:center; gap:10px;">
+    <div class="marca-linha1">
       <img src="logo-icone.png" alt="Logo da igreja" class="logo-igreja" onerror="this.style.display='none'">
-      <span>EBD <span style="color:var(--dourado);">&middot;</span> Escola Bíblica</span>
+      <div class="marca-bloco">
+        <span>EBD Escola Bíblica Dominical - Santa Paula</span>
+        <div class="marca-usuario" id="nome-usuario-topo"></div>
+      </div>
     </div>
-    <div class="usuario">
-      <span id="nome-usuario-topo"></span>
-      <button onclick="sair()">Sair</button>
-    </div>
+    <button class="sair" onclick="sair()">Sair</button>
   </div>
 
   <div class="abas" id="abas"></div>
